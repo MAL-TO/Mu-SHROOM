@@ -95,7 +95,7 @@ def evaluate_hallucination(sentence, base_tokenizer, base_model, mnli_model, mnl
             top_k_tokens.append(token.item())
             top_k_probs.append(prob.item())
             
-            if cumulative_prob >= 0.90:
+            if cumulative_prob >= 0.9:
                 break
         
         full_results.append([])
