@@ -7,22 +7,23 @@ def generate_full_word_cache(input_ids, model, tokenizer, past_key_values):
 
     generated_ids = input_ids
     generated_tokens = [input_ids[0][-1].item()]
-    pkv = past_key_values
 
     prob = 1.0
+
+    counter = 0
     
     while True:
         # Get model outputs with caching enabled
+        print("Passing to the model: ", tokenizer.decode(generated_tokens))
+        print("Generated tokens: ", generated_tokens)
         outputs = model(
-            input_ids=generated_ids, 
+            input_ids=torch.Tensor(generated_tokens).unsqueeze(0).to(model.device), 
             use_cache=True,
-            return_dict=True,
-            past_key_values=pkv
+            past_key_values=past_key_values
         )
         
         # Get logits for the next token
         next_token_logits = outputs.logits[:, -1, :]
-        pkv = outputs.past_key_values
         
         # Calculate token probabilities
         next_token_probs = torch.softmax(next_token_logits, dim=-1)
@@ -40,6 +41,10 @@ def generate_full_word_cache(input_ids, model, tokenizer, past_key_values):
         generated_tokens.append(next_token_id.item())    
         prob *= next_token_prob.item()
         generated_ids = torch.cat((generated_ids, next_token_id.unsqueeze(0)), dim=1)
+
+        counter += 1
+        if counter == 10: 
+            break
         
     return generated_tokens, prob
 
@@ -50,7 +55,8 @@ def generate_full_word(input_ids, model, tokenizer):
     generated_tokens = [input_ids[0][-1].item()]
 
     prob = 1.0
-    
+    counter = 0
+
     while True:
         # Get model outputs with caching enabled
         outputs = model(
@@ -78,6 +84,10 @@ def generate_full_word(input_ids, model, tokenizer):
         generated_tokens.append(next_token_id.item())    
         prob *= next_token_prob.item()
         generated_ids = torch.cat((generated_ids, next_token_id.unsqueeze(0)), dim=1)
+
+        counter += 1
+        if counter == 10: 
+            break
         
     return generated_tokens, prob
 
@@ -144,6 +154,7 @@ def evaluate_hallucination(sentence, base_tokenizer, base_model, mnli_model, mnl
                 total_influence += prob
             print(f"Token: {token}, Relateness: {relateness}, Probability: {prob}, Token Probability: {token_prob}")
             torch.cuda.empty_cache()
+            
         
         if total_influence == 0:
             hallucination_score = 0
@@ -227,11 +238,8 @@ if __name__ == "__main__":
     base_model = AutoModelForCausalLM.from_pretrained(model_path, load_in_4bit = True, device_map='cuda')
     tokenizer = AutoTokenizer.from_pretrained(model_path)
 
-    mnli_model = AutoModelForSequenceClassification.from_pretrained("cross-encoder/nli-deberta-v3-xsmall")
-    mnli_tokenizer = AutoTokenizer.from_pretrained("cross-encoder/nli-deberta-v3-xsmall")
-
-    # only cuda visible devices 1 
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    mnli_model = AutoModelForSequenceClassification.from_pretrained("cross-encoder/nli-deberta-v3-large")
+    mnli_tokenizer = AutoTokenizer.from_pretrained("cross-encoder/nli-deberta-v3-large")
 
     data_dir = "data/test"
     data_file = "mushroom.en-tst.v1.jsonl"
@@ -256,26 +264,26 @@ if __name__ == "__main__":
         sentence = data[i]
         try:
             print(f"Processing sample {i}")
-            words, labels = evaluate_hallucination(sentence, tokenizer, base_model, mnli_model, mnli_tokenizer)
+            words, labels = evaluate_hallucination_cache(sentence, tokenizer, base_model, mnli_model, mnli_tokenizer)
             sentence['words evaluated'] = words
             sentence['hallucination_scores_evaluated'] = labels
 
 
             with open(output_path, "a") as f:
                 f.write(json.dumps(sentence) + "\n")
-        # except RuntimeError as e:
-        #     try: 
-        #         print(f"Processing sample {i}")
-        #         labels = evaluate_hallucination(sentence, tokenizer, base_model, mnli_model, mnli_tokenizer)
-        #         sentence['hallucination_scores_evaluated'] = labels
-
-        #         with open(output_path, "a") as f:
-        #             f.write(json.dumps(sentence) + "\n")
         except RuntimeError as e:
-            if "CUDA out of memory" in str(e):
-                print(f"CUDA out of memory error for sample {i}, skipping to the next sample.")
-                torch.cuda.empty_cache()
-                continue
-            else:
-                raise e
+            try: 
+                print(f"Processing sample {i}")
+                labels = evaluate_hallucination(sentence, tokenizer, base_model, mnli_model, mnli_tokenizer)
+                sentence['hallucination_scores_evaluated'] = labels
+
+                with open(output_path, "a") as f:
+                    f.write(json.dumps(sentence) + "\n")
+            except RuntimeError as e:
+                if "CUDA out of memory" in str(e):
+                    print(f"CUDA out of memory error for sample {i}, skipping to the next sample.")
+                    torch.cuda.empty_cache()
+                    continue
+                else:
+                    raise e
         
