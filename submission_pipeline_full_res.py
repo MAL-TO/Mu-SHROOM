@@ -3,6 +3,8 @@ import json
 import os
 import torch
 
+from tqdm import tqdm
+
 def generate_full_word(input_ids, model, tokenizer):
 
     generated_ids = input_ids
@@ -78,7 +80,7 @@ def evaluate_hallucination(sentence, base_tokenizer, base_model, mnli_model, mnl
 
         # evaluate top k tokens for the next word after until_now
         probabilities = base_model(token_id_until_now, return_dict=True).logits.softmax(dim=-1)
-        probabilities = probabilities.squeeze(0)
+        probabilities = probabilities[0, -1, :]
 
         sorted_probs, sorted_indices = torch.sort(probabilities, descending=True)
 
@@ -87,22 +89,24 @@ def evaluate_hallucination(sentence, base_tokenizer, base_model, mnli_model, mnl
         top_k_probs = []
 
         for token, prob in zip(sorted_indices, sorted_probs):
+            if prob.item() < 0.005:
+                break
             cumulative_prob += prob.item()
             top_k_tokens.append(token.item())
             top_k_probs.append(prob.item())
             
-            if cumulative_prob >= 0.95:
+            if cumulative_prob >= 0.90:
                 break
         
         full_results.append([])
 
-        for j in range(len(top_k_tokens)): 
+        for j in tqdm(range(len(top_k_tokens))): 
             res = {}
             token_id = top_k_tokens[j]
             token_prob = top_k_probs[j]
             res["token_id"] = token_id
             res["token_prob"] = token_prob
-            print(f"Predicted token: {base_tokenizer.decode([token_id])}, Probability: {token_prob}")
+            # print(f"Predicted token: {base_tokenizer.decode([token_id])}, Probability: {token_prob}")
             topk_token_ids, prob = generate_full_word(torch.cat((token_id_until_now, torch.tensor([[token_id]]).to(base_model.device)), dim=1), base_model, base_tokenizer)
             token = base_tokenizer.decode(topk_token_ids, skip_special_tokens=True)
 
@@ -115,11 +119,11 @@ def evaluate_hallucination(sentence, base_tokenizer, base_model, mnli_model, mnl
             prob = token_prob * prob
             mnli_probs = get_mnli_probs(next_generated_token, token, mnli_model, mnli_tokenizer)
 
-            res["mnli_probs"] = mnli_probs
+            res["mnli_probs"] = mnli_probs.tolist()
             
-            print(f"Token: {token}, Relateness: {mnli_probs}, Probability: {prob}, Token Probability: {token_prob}")
+            # print(f"Token: {token}, Relateness: {mnli_probs}, Probability: {prob}, Token Probability: {token_prob}")
 
-            full_results[i].append(res)
+            full_results[-1].append(res)
             torch.cuda.empty_cache()
             
     return words, full_results
