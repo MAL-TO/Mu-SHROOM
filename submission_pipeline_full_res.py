@@ -130,12 +130,6 @@ def evaluate_hallucination(sentence, base_tokenizer, base_model, mnli_model, mnl
 
 if __name__ == "__main__":
     # Load the model and tokenizer
-    model_path = "Qwen/QwQ-32B-Preview"
-    base_model = AutoModelForCausalLM.from_pretrained(model_path, load_in_4bit = True, device_map='cuda')
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-
-    mnli_model = AutoModelForSequenceClassification.from_pretrained("cross-encoder/nli-deberta-v3-large")
-    mnli_tokenizer = AutoTokenizer.from_pretrained("cross-encoder/nli-deberta-v3-large")
 
     data_dir = "data/test"
     data_file = "mushroom.en-tst.v1.jsonl"
@@ -155,6 +149,13 @@ if __name__ == "__main__":
         data = [sample for sample in data if sample['id'] not in processed_ids]
     
     print(len(data))
+    
+    model_path = "Qwen/QwQ-32B-Preview"
+    base_model = AutoModelForCausalLM.from_pretrained(model_path, load_in_4bit = True, device_map='cuda')
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+    mnli_model = AutoModelForSequenceClassification.from_pretrained("cross-encoder/nli-deberta-v3-large")
+    mnli_tokenizer = AutoTokenizer.from_pretrained("cross-encoder/nli-deberta-v3-large")
     
     for i in range(len(data)):
         sentence = data[i]
