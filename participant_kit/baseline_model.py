@@ -100,7 +100,7 @@ def test_model(test_lang, model_path, data_path):
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model = AutoModelForTokenClassification.from_pretrained(model_path)
     # Load the test dataset
-    test_dataset = load_dataset('json', data_files={'test': f'{data_path}/mushroom.{test_lang}-val.v2.jsonl'})['test']
+    test_dataset = load_dataset('json', data_files={'test': f'{data_path}/mushroom.{test_lang}-tst.v1.jsonl'})['test']
     # Tokenize test dataset
     inputs = tokenizer(test_dataset['model_output_text'], padding=True, truncation=True, return_offsets_mapping=True, return_tensors="pt")
 
@@ -120,7 +120,8 @@ def test_model(test_lang, model_path, data_path):
         positive_indices = torch.nonzero(pred == 1, as_tuple=False)
         offset_mapping = inputs['offset_mapping'][i]
         for j, offset in enumerate(offset_mapping):
-            soft_labels_sample.append({'start': offset[0].item(), 'end': offset[1].item(), 'prob': probs[i][j][1].item()})
+            if offset[0] != offset[1]:
+                soft_labels_sample.append({'start': offset[0].item(), 'end': offset[1].item(), 'prob': probs[i][j][1].item()})
             if j in positive_indices:
                 hard_labels_sample.append((offset[0].item(), offset[1].item()))
         soft_labels_all[test_dataset['id'][i]] = soft_labels_sample
