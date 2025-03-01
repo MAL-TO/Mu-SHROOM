@@ -133,6 +133,7 @@ if __name__ == "__main__":
 
     data_dir = "data/test"
     data_file = "mushroom.en-tst.v1.jsonl"
+    model_path = "Qwen/Qwen2-0.5B-Instruct"
     data_path = os.path.join(data_dir, data_file)
 
     with open(data_path, "r") as f:
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     print(len(data))
     
     # check if the sentence was already processed
-    output_path = os.path.join(data_dir, "results_full.jsonl")
+    output_path = os.path.join(data_dir, model_path.split("/")[-1] + "_evaluated.jsonl")
     if os.path.exists(output_path):
         with open(output_path, "r") as f:
             processed_data = [json.loads(line) for line in f]
@@ -149,8 +150,7 @@ if __name__ == "__main__":
         data = [sample for sample in data if sample['id'] not in processed_ids]
     
     print(len(data))
-    
-    model_path = "Qwen/QwQ-32B-Preview"
+
     base_model = AutoModelForCausalLM.from_pretrained(model_path, load_in_4bit = True, device_map='cuda')
     tokenizer = AutoTokenizer.from_pretrained(model_path)
 
